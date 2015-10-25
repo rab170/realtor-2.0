@@ -1,13 +1,12 @@
-import os
-import time
-import errno
-import string
-import urllib2
-import urlparse
-import feedparser
+
 from re import sub
-from decimal import Decimal
 from bs4 import BeautifulSoup
+import os, time, errno, string, inspect, urllib2, urlparse, feedparser
+
+
+def metric(f):
+    f.is_metric = True
+    return f
 
 def mkdir_p(path):
     try:
@@ -18,99 +17,123 @@ def mkdir_p(path):
         else:
             raise
 
-class AptFeed(): 
+#TODO daemonize 
+#TODO add postgresql server to store all data (and to acomplish todo above ^^)
+
+#TODO hide http requests behind array of proxies (or tor)
+#TODO add fields
+
+class AptFeed(object): 
+
+    """
+    Loop over a given CraigsList RSS feed for Apartment Listings and save metrics that predict property value to a PostgreSQL database
+
+    @metric functions:
+        these accept a BeautifulSoup (html) object and return a dictionary whose keys map to the postgresql database fields, and values are that listing's coresponding values
+
+        this convention allows new metrics to be added to the AptFeed class without any additional overhead. All metrics can be automatically called, and new db fields
+        can be automatically added
+
+    """
 
     feed = None
     nan  = float('nan')
     no_geo = (nan, nan)
 
-    #TODO finish process feed function to automate feeding and checking whether posts have been seen before
-    #TODO add postgresql server to store all data (and to acomplish todo above ^^)
-    #TODO hide http requests behind array of proxies (or tor)
-
-    # add lots of fields...lots
-    # save raw html for NLP, date posted, date modified, number of images, pixle density of images, size of images, distance from subway, yelp reviews, types of stores near by...
-
-    def __init__(self, rss_url, img_base, soup_parser='lxml'):
+    def __init__(self, rss_url, base_dir, soup_parser='lxml'):
         self.rss_url = rss_url
-        self.img_base = img_base
+        self.filesystem_base = base_dir
         self.soup_parser = soup_parser
-        #self.update_feed()
+        methods = inspect.getmembers(self, predicate=inspect.ismethod)
+        self.metric_methods = [method for (name, method) in methods if 'is_metric' in dir(method)]
     
-    def update_feed(self):
-        self.feed = feedparser.parse(self.rss_url, modified=(self.feed.modified if self.feed != None else None))
-        return self.feed.status
-
-    def process_feed(self):
-        for item in feed['items']:
-            soup = self.get_soup(item['link'])
-
+    @metric
     def get_rent(self, soup):
-        price = soup.find('span', {'class':'price'}).text
-        return self.str_to_dec(price)
+        rent = soup.find('span', {'class':'price'}).text
+        rent = self.str_to_float(rent)
+        return {'rent':rent}
 
+    @metric
     def get_geo(self, soup):
-
         map_div = soup.find('div', {'id':'map'})
-        geo_keys = ['data-latitude', 'data-longitude']
-
+        geo_keys = ['data-latitude', 'data-longitude']  # this div also contains an "accuracy" metric -- maybe useful, probably not
         if map_div == None or any(key not in map_div.attrs for key in geo_keys): return self.no_geo
-
         cords = map(map_div.attrs.get, geo_keys)
-        geo = tuple( self.str_to_dec(cord) for cord in cords )
-        return geo
+        geo = tuple( self.str_to_float(cord) for cord in cords )
+        return {'geo':geo}
 
+    @metric
     def get_size_metrics(self, soup):
-
-        available_metrics = {}
+        db_fields = {}
         size_metrics = ['ft2', 'br']
-
         housing_info = soup.find('span', {'class':'housing'}).text
         if housing_info == None: return {}
-
         housing_info = [part.strip() for part in  housing_info.split('-')]
         for info in housing_info:
             for metric in size_metrics:
                 if metric in info:
-                    available_metrics[metric] = self.force_int( info.replace(metric, '') )
-        return available_metrics
+                    db_fields[metric] = self.force_int( info.replace(metric, '') )
+        return db_fields
         
-    def save_images(self, soup):
+    @metric 
+    def get_url(self, soup):
+        url = soup.link.attrs['href']
+        return {'url':url}
+
+    def save_images(self, soup, img_dir):
         thumbs = soup.find('div', {'id':'thumbs'}).findAll('a')
         if thumbs == None: return 0
+        mkdir_p(img_dir)
 
-        base_dir = os.path.join(self.img_base, self.get_post_id(soup)) 
-        mkdir_p(base_dir)
         for i, thumb in enumerate(thumbs):
-            img_url = thumb['href'] 
-            img_data = urllib2.urlopen(img_url).read() 
-            img_path = urlparse.urlparse(img_url).path 
+            img_data = urllib2.urlopen(thumb['href'] ).read() #TODO hide with random list of proxies
+            img_path = urlparse.urlparse(thumb['href']).path 
             img_ext =  os.path.splitext(img_path)[1]
-
-            path = os.path.join(base_dir, '{0}{1}'.format(i, img_ext))
-            f = open(path, 'wb')
-            f.write(img_data)
+            path = os.path.join(img_dir, '{0}{1}'.format(i, img_ext))
+            with open(path, 'wb') as f:
+                f.write(img_data)
         return i
 
-    def get_post_id(self, soup):
-        text = soup.find('div', {'class':'postinginfos'}).findAll('p', {'class':'postinginfo'})[0].text
-        return str(text).translate(None, string.whitespace).split(':')[-1]
+    def save_items(self, soup, apt_id):
+        base_dir = os.path.join(self.filesystem_base, apt_id) 
+        img_dir = os.path.join(base_dir, 'img')
+        mkdir_p(base_dir)
 
-    def get_soup(self, url):
-        html = urllib2.urlopen(url).read()
+        self.save_images(soup, img_dir)
+        self.save_html(soup, base_dir)
+
+    def process_feed(self):
+        for item in self.feed['items']:
+            soup = self.soup(item['link'])
+            metrics = coalesce_metrics( [f(soup) for f in self.metric_methods] )
+            self.save_items(soup)
+
+    def update_feed(self):
+        self.feed = feedparser.parse(self.rss_url, modified=(self.feed.modified if self.feed != None else None))
+        return self.feed.status
+
+    def soup(self, url):
+        html = urllib2.urlopen(url).read() #TODO hide with random list of proxies
         return BeautifulSoup(html, self.soup_parser)
 
-    def str_to_dec(self, string):
-        return Decimal(sub(r'[^\d.]', '', string))
+    def coalesce_metrics(self, metric_list):
+        db_fields = {}
+        for field in metric_list:
+            db_fields.update(field)
+        return db_fields 
+
+    def str_to_float(self, string):
+        return float(sub(r'[^\d.]', '', string))
 
     def force_int(self, string):
         return int(sub(r'[^\d]', '', string))   #CL seems to enforce ints for price and square footage. Taking the risk for now. Just want it running
 
+
 if __name__ == '__main__':
     
-    link = r'https://newyork.craigslist.org/search/aap?format=rss&hasPic=1'     # this forces the listing to have a picture AND square footage
-                                                                                # consider changing to allow for no square footage...much harder
-                                                                                # to extract bedroom and size metrics..but may lose some gems
+    link = r'https://newyork.craigslist.org/search/aap?format=rss&hasPic=1&minSqft=1'       # this forces the listing to have a picture AND square footage
+                                                                                            # consider changing to allow for no square footage...much harder
+                                                                                            # to extract bedroom and size metrics..but may lose some gems
     #TODO move this to a unittest suite 
     #TODO you should be ashamed of yourself 
     #TODO YOU HEATHEN
@@ -121,10 +144,12 @@ if __name__ == '__main__':
     c = 'https://newyork.craigslist.org/que/fee/5280918276.html'
     urls = [a, b, c]
     for url in urls:
-        soup = parser.get_soup(url)
+        soup = parser.soup(url)
         print parser.get_rent(soup)
         print parser.get_geo(soup)
-        print parser.get_post_id(soup)
+        apt_id = parser.get_post_id(soup)
+        print apt_id
         print parser.get_size_metrics(soup)
-        print parser.save_images(soup)
+        parser.save_items(soup, apt_id['craigslist_id'])
+
 
