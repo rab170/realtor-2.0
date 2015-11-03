@@ -1,4 +1,6 @@
+import math
 import shutil
+import socket
 import random
 import psycopg2
 import dateutil.parser
@@ -8,6 +10,37 @@ from datetime import datetime
 from psycopg2 import errorcodes
 import os, time, errno, string, inspect, urllib2, urlparse, feedparser, re
 
+
+
+class ProxyHandler:
+
+    def __init__(self, proxy_list_path):
+        self.N = -1
+        if os.path.exists(proxy_list_path):
+            with open(proxy_list_path) as f:
+                self.proxies = [ {'ip':l.split()[0], 'port':l.split()[1]} for l in f.readlines() ]
+            self.N = len(self.proxies)
+        
+    def get_proxy(self):
+        if self.N >= 0:
+            index = random.randint(0, self.N - 1)
+            proxy = self.proxies[index]
+            return self.get_opener(proxy['ip'], proxy['port'])
+        return False
+
+    def get_opener(self, ip, port, auth=None):
+        proxy_string = 'http://{0}:{1}'.format(ip, port)
+        proxy = urllib2.ProxyHandler({'http':proxy_string})
+        opener = urllib2.build_opener(proxy)
+
+        """
+        request = opener.open('http://checkip.dyndns.org').read()
+        ext_ip = re.findall(r"\d{1,3}\.\d{1,3}\.\d{1,3}.\d{1,3}", request)[0]
+        if ext_ip != ip:
+            return False 
+        """
+
+        return opener
 
 def metric(f):
     f.is_metric = True
@@ -29,8 +62,6 @@ def mkdir_p(path):
             raise
 
 #TODO good comments (see: https://google-styleguide.googlecode.com/svn/trunk/pyguide.html#Comments)  + UnitTest suite
-
-#TODO hide http requests behind array of proxies (or tor)
 #TODO add fields
 
 class AptFeed(object): 
@@ -48,20 +79,21 @@ class AptFeed(object):
 
     null    = 'NULL'
     nan     = float('nan')
-    no_geo  = {'latitude':None, 'longitude':None}
+    no_geo  = {'latitude':nan, 'longitude':nan}
     str_token = '$TOKEN$'   # used as quote character to wrap Postgre text field strings (eg: $TOKEN$ "quotes" can't cause any "problems" $TOKEN$)
 
     feed = None
     pg_conn = None
-    postgresql_types = {int:'int4', float:'float4', str:'text', unicode:'text',  datetime:'timestamp'}
+    postgresql_types = {int:'int4', float:'float4', str:'text', unicode:'text', datetime:'timestamp'}
     ACTIVE_LISTINGS = 'active_listings'
 
-    wait_time = 10 
+    wait_time = 5
 
-    def __init__(self, rss_url, base_dir, db_name=None, db_user=None, soup_parser='lxml'):
+    def __init__(self, rss_url, base_dir, proxy_path='', db_name=None, db_user=None, soup_parser='lxml'):
         self.rss_url = rss_url
-        self.filesystem_base = base_dir
         self.soup_parser = soup_parser
+        self.filesystem_base = os.path.expanduser(base_dir)
+        self.proxy_handler = ProxyHandler(os.path.expanduser(proxy_path))
 
         methods = inspect.getmembers(self, predicate=inspect.ismethod)
         self.metric_methods = [method for (name, method) in methods if 'is_metric' in dir(method)]
@@ -75,21 +107,25 @@ class AptFeed(object):
             self.update_feed()
             t_start = time.time()
             for item in self.feed['items']:
-                soup = self.soup(item['link'])
-                metrics = self.coalesce_metrics(soup)
-                self.pgSQL_insert(metrics, self.ACTIVE_LISTINGS)
-                time.sleep(random.normalvariate(self.wait_time, self.wait_time*0.25))
+                if not self.pgSQL_apt_exists(item['link']):
+                    soup = self.soup(item['link'])
+                    metrics = self.coalesce_metrics(soup)
+                    self.pgSQL_insert(metrics, self.ACTIVE_LISTINGS)
+                    time.sleep(random.normalvariate(self.wait_time, self.wait_time*0.25))
             elapsed = time.time() - t_start;
-            if elapsed < 5*60:
-                time.sleep(5*60 - elapsed)
+            if elapsed < 7*60:
+                time.sleep(7*60 - elapsed)
 
     def update_feed(self):
         self.feed = feedparser.parse(self.rss_url, modified=(self.feed.modified if self.feed != None else None))
         return self.feed.status
 
     def soup(self, url):
-        html = urllib2.urlopen(url).read() #TODO hide with random list of proxies
-        return BeautifulSoup(html, self.soup_parser)
+        proxy = self.proxy_handler.get_proxy()
+        if proxy:
+            html = proxy.open(url).read()
+            return BeautifulSoup(html, self.soup_parser)
+        return None
 
     @metric
     def get_rent(self, soup):
@@ -119,6 +155,9 @@ class AptFeed(object):
                     db_fields[metric] = int(text)
         return db_fields
         
+    @metric
+    def get_scrape_time(self, soup):
+        return {'scrape_time': datetime.now()}
     @metric 
     def get_url(self, soup):
         url = soup.link.attrs['href']
@@ -128,6 +167,11 @@ class AptFeed(object):
     def get_text_body(self, soup):
         body = soup.find('section', {'id':'postingbody'}).text
         return {'text_body':body}
+
+    @metric
+    def get_title(self, soup):
+        title = soup.title.text
+        return {'title':title}
 
     @metric
     def get_cl_id(self, soup):
@@ -151,18 +195,23 @@ class AptFeed(object):
         img_dir = str(self.get_cl_id(soup)['cl_id'])
         img_dir = os.path.join(self.filesystem_base, img_dir) 
         mkdir_p(img_dir)
+
+        count = 0
+        proxy = self.proxy_handler.get_proxy()
         for i, thumb in enumerate(thumbs):
-            img_data = urllib2.urlopen(thumb['href'] ).read()       #TODO hide with random list of proxies
-            img_path = urlparse.urlparse(thumb['href']).path 
-            img_ext =  os.path.splitext(img_path)[1]
-            path = os.path.join(img_dir, '{0}{1}'.format(i, img_ext))
-            with open(path, 'wb') as f:
-                f.write(img_data)
-        return {'n_img':i}
+            if proxy:
+                img_data = proxy.open(thumb['href'] ).read()       #TODO hide with random list of proxies
+                img_path = urlparse.urlparse(thumb['href']).path 
+                img_ext =  os.path.splitext(img_path)[1]
+                path = os.path.join(img_dir, '{0}{1}'.format(i, img_ext))
+                with open(path, 'wb') as f:
+                    f.write(img_data)
+                    count+=1
+        return {'n_img':count}
 
     def coalesce_metrics(self, soup):
         db_fields = {}
-        for field in [f(soup) for f in self.metric_methods]:
+        for field in [self.null_if_error(f, soup) for f in self.metric_methods]:
             db_fields.update(field)
         return db_fields 
 
@@ -187,7 +236,9 @@ class AptFeed(object):
                     cursor = self.pg_conn.cursor()
                     cursor.execute(query)
             elif str(e.pgcode) == str(psycopg2.errorcodes.UNIQUE_VIOLATION):
+                # TODO add support for update operations
                 print psycopg2.errorcodes.lookup(e.pgcode)
+                print metrics['url']
             else:
                 raise
 
@@ -235,12 +286,28 @@ class AptFeed(object):
                 else:
                     raise
         return missing_fields
-    
+
+    def pgSQL_apt_exists(self, url):
+        cl_id = url.split('/')[-1].replace('.html', '')
+        if cl_id != '':
+            query = 'select exists(select 1 from active_listings where cl_id = {0})'.format(cl_id)
+            cursor = self.pg_conn.cursor()
+            cursor.execute(query)
+            return cursor.fetchone()[0]
+        return False
+
+    def post_removed(self, soup):
+        removed = soup.find('div', {'class':'removed'})
+        if removed == None:
+            return False
+        return True
+
     def reset_db(self):
-        shutil.rmtree(self.filesystem_base)
+        if os.path.exists(self.filesystem_base):
+            shutil.rmtree(self.filesystem_base)
         cursor = self.pg_conn.cursor()
         cursor.execute('drop table {0}'.format(self.ACTIVE_LISTINGS));
-        cursor.execute('create table {0}( cl_id int8 primary key )'.format(self.ACTIVE_LISTINGS))
+        cursor.execute('create table {0}( cl_id int8 primary key, listing_number serial8 )'.format(self.ACTIVE_LISTINGS))
         self.pg_conn.commit()
 
     @pgSQL_type_conversion
@@ -261,6 +328,7 @@ class AptFeed(object):
     @pgSQL_type_conversion
     def convert_float(self, val):
         if type(val) != float: return self.null
+        if math.isnan(val): return self.str_token + 'NaN' + self.str_token 
         return str(val)
 
     @pgSQL_type_conversion
@@ -280,6 +348,11 @@ class AptFeed(object):
     def str_to_float(self, string):
         return float(re.sub(r'[^\d.]', '', string))
 
+    def null_if_error(self, f, soup):
+        try:
+            return f(soup)
+        except:
+            return self.null
 
 if __name__ == '__main__':
     
@@ -290,6 +363,6 @@ if __name__ == '__main__':
     #TODO you should be ashamed of yourself 
     #TODO YOU HEATHEN
 
-    parser = AptFeed(link, os.path.expanduser('~/img'), 'apartment_listings', 'an0nym1ty' )
-    #parser.reset_db()
+    parser = AptFeed(link, '~/img', '~/proxies', 'apartment_listings','an0nym1ty' )
+    parser.reset_db()
     parser.process_feed()
