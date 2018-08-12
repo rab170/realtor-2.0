@@ -130,6 +130,7 @@ class Gesucht(Parser):
         divs = soup.findAll('div', {'class': 'col-sm-6'})
         names = map(lambda element: element.find('h4', {'class': 'headline headline-detailed-view-datasheet'}), divs)
         names = map(clean, names)
+        names = list(names)
 
         div = divs[names.index(u'Die WG')]
         wg_details = div.find('ul', {'class': 'ul-detailed-view-datasheet print_text_left'}).findAll('li')
@@ -167,6 +168,7 @@ class Gesucht(Parser):
         divs = soup.findAll('div', {'class': 'col-xs-12'})
         h3s = map(lambda div: div.find('h3', {'class': 'headline headline-detailed-view-panel-title'}), divs)
         h3s = map(lambda h3: h3.text.strip() if h3 else h3, h3s)
+        h3s = list(h3s)
 
         description = divs[h3s.index(u'Anzeigentext')]
         description = re.sub('\s\s+', '\n', description.text.strip())
