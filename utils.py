@@ -1,4 +1,6 @@
 import os
+import errno
+import random
 import urllib2
 from itertools import cycle
 
