@@ -1,9 +1,9 @@
 import re
 import time
 import inspect
-import urllib2
+import urllib
 import logging
-import urlparse
+import urllib.parse
 import googlemaps
 from functools import reduce
 from bs4 import BeautifulSoup
@@ -12,9 +12,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
 from abc import ABCMeta, abstractmethod
-
 from utils import ProxyHandler
 
 
@@ -38,8 +36,12 @@ class Parser(object):
     bs4_parsing = 'html5lib'
 
     def __init__(self, config):
-        option = webdriver.ChromeOptions()
-        self.selenium = webdriver.Chrome(executable_path=config['webdriver_path'], chrome_options=option)
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+
+        self.selenium = webdriver.Chrome(executable_path=config['webdriver_path'], chrome_options=options)
 
         methods = inspect.getmembers(self, predicate=inspect.ismethod)
         self.metric_methods = [method for (name, method) in methods if 'is_metric' in dir(method)]
@@ -57,8 +59,8 @@ class Parser(object):
                 proxy = self.proxy_handler.get_proxy()
                 html = proxy.open(url).read()
             else:
-                html = urllib2.urlopen(url).read()
-        except urllib2.HTTPError as e:
+                html = urllib.request.urlopen(url).read()
+        except urllib.error.HTTPError as e:
             logging.error('failed to parse BeautifulSoup for {url}. \n'
                           'Encountered error: {e}'.format(url=url, e=e))
             return None
@@ -84,14 +86,15 @@ class Gesucht(Parser):
         listings = set()
 
         for url in self.search_urls:
-            for page in range(n / self.listings_per_page + 1):
+            n_pages = int(n/self.listings_per_page) + 1
+            for page in range(n_pages):
                 page = self.soup(url.format(page=page))
                 ad_ids = page.findAll('tr', {'adid': re.compile(r'.*')})
                 ad_ids = map(lambda listing: listing['adid'], ad_ids)
-                ad_urls = map(lambda relative_url: urlparse.urljoin(self.domain, relative_url), ad_ids)
+                ad_urls = map(lambda relative_url: urllib.parse.urljoin(self.domain, relative_url), ad_ids)
 
                 # Drop first 2 listings. They're ads
-                listings = listings.union(ad_urls[2:])
+                listings = listings.union(list(ad_urls)[2:])
         return list(listings)[:n]
 
     @metric

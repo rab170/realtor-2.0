@@ -10,7 +10,7 @@ from pgSQL_handler import pgSQL
 
 if __name__ == '__main__':
 
-    with open('~/config.yaml') as f:
+    with open('config.yaml') as f:
         config = yaml.load(f)
 
     parser = Gesucht(config)

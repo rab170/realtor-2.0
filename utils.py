@@ -1,7 +1,7 @@
 import os
 import errno
 import random
-import urllib2
+import urllib
 from itertools import cycle
 
 class ProxyHandler(object):
@@ -28,8 +28,8 @@ class ProxyHandler(object):
 
     def get_opener(self, ip, port, auth=None):
         proxy_string = 'http://{0}:{1}'.format(ip, port)
-        proxy = urllib2.ProxyHandler({'http':proxy_string})
-        opener = urllib2.build_opener(proxy)
+        proxy = urllib.ProxyHandler({'http':proxy_string})
+        opener = urllib.build_opener(proxy)
         return opener
 
 def mkdir_p(path):
