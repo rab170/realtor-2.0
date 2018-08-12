@@ -149,6 +149,10 @@ class pgSQL(object):
         return self.str_token + json.dumps(val) + self.str_token
 
     @conversion
+    def convert_map(self, val):
+        return self.str_token + json.dumps(list(val)) + self.str_token
+
+    @conversion
     def convert_str(self, val):
         return self.str_token + val + self.str_token
 
