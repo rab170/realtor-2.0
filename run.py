@@ -2,6 +2,7 @@
 
 import time
 import yaml
+import random
 import logging
 
 from Parser import Gesucht
@@ -24,6 +25,4 @@ if __name__ == '__main__':
         logging.info('{url} parsed'.format(url=listing))
         SQL.insert(metrics)
         logging.info('{url} inserted to postgreSQL'.format(url=listing))
-        time.sleep(10)
-
-
+        time.sleep(random.uniform(10, 20))
