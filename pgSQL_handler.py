@@ -27,7 +27,7 @@ class pgSQL(object):
     nan = 'nan'
     str_token = '$TOKEN$'
 
-    TYPES = {int: 'int4', list: 'text', float: 'float4', str: 'text', unicode: 'text',
+    TYPES = {int: 'int4', list: 'text', float: 'float4', str: 'text', 
              datetime: 'timestamp', bool: 'bool'}
 
     def __init__(self, db_config, table='hamburg'):
@@ -155,10 +155,6 @@ class pgSQL(object):
     @conversion
     def convert_bool(self, val):
         return str(val)
-
-    @conversion
-    def convert_unicode(self, val):
-        return self.str_token + val + self.str_token
 
     @conversion
     def convert_int(self, val):
