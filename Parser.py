@@ -3,8 +3,10 @@ import time
 import inspect
 import urllib
 import logging
-import urllib.parse
 import googlemaps
+import urllib.parse
+import dateutil.parser
+
 from functools import reduce
 from bs4 import BeautifulSoup
 
@@ -26,6 +28,11 @@ def metric(f):
 
     g.is_metric = True
     return g
+
+
+class Captcha(Exception):
+    def __init__(self):
+        super().__init__('Captcha found in request.')
 
 
 class Parser(object):
@@ -63,24 +70,51 @@ class Parser(object):
         except urllib.error.HTTPError as e:
             logging.error('failed to parse BeautifulSoup for {url}. \n'
                           'Encountered error: {e}'.format(url=url, e=e))
+            if e.code == 403:
+                raise
             return None
 
         soup = BeautifulSoup(html, self.bs4_parsing)
         soup.attrs['url'] = url
+        if self.has_captcha(soup):
+            raise Captcha()
         return soup
 
     @abstractmethod
     def get_listings(self, listing_url):
         return []
 
+    @abstractmethod
+    def has_captcha(self, soup):
+        pass
+
+    @abstractmethod
+    def is_active(self, url):
+        pass
+
+    def __del__(self):
+        self.selenium.quit()
+
     def __exit__(self, exc_type, exc_value, traceback):
-        self.selenium.close()
+        self.selenium.quit()
 
 
 class Gesucht(Parser):
 
     listings_per_page = 20
     domain = 'https://www.wg-gesucht.de'
+
+    def is_deactivated(self, url):
+        soup = self.soup(url)
+        if soup is None:
+            return True
+
+        warning = soup.find('div', {'class': 'noprint alert alert-warning'})
+        if warning is not None:
+            children = filter(lambda item: 'text' in dir(item), warning.children)
+            warnings = ' '.join(child.text for child in children)
+            return 'deaktiviert' in warnings
+        return False
 
     def get_listings(self, n=listings_per_page):
         listings = set()
@@ -96,6 +130,11 @@ class Gesucht(Parser):
                 # Drop first 2 listings. They're ads
                 listings = listings.union(list(ad_urls)[2:])
         return list(listings)[:n]
+
+    def has_captcha(self, soup):
+        if soup.find('div', {'class': 'g-recaptcha'}):
+            return True
+        return False
 
     @metric
     def get_url(self, soup):
@@ -211,4 +250,29 @@ class Gesucht(Parser):
         pairs = filter(lambda item: item[0] != u'https://www.wg-gesucht.de/img/d.gif', pairs)
         urls, desc = map(list, zip(*pairs))
 
+        # retrun None for desc if all ''
+
         return {'image_urls': urls, 'image_descriptions': desc}
+
+    @metric
+    def get_availability(self, soup):
+
+        def is_date(s):
+            try:
+                dateutil.parser.parse(s)
+                return True
+            except ValueError:
+                return False
+
+        dates = soup.find('div', {'class':'col-sm-3'})
+        dates = dates.find('p').findAll('b')
+        dates = [b.text for b in dates]
+        dates = filter(is_date, dates)
+
+        dates = [dateutil.parser.parse(s, dayfirst=True) for s in dates]
+        if len(dates) == 0:
+            return {}
+        if len(dates) == 1:
+            return {'free_from': dates[0]}
+        if len(dates) == 2:
+            return {'free_from': dates[0], 'free_until': dates[1]}
