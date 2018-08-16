@@ -123,26 +123,21 @@ class pgSQL(object):
         return missing_fields
 
     def get_active_listings(self):
-        """
-        """
-        # column_selection_string = ','.join(column_selection)
-        query = 'select url from {table} where archived = False'.format(table=self.table)
+        query = 'select url from {table} where archived = False order by timestamp'.format(table=self.table)
         cursor = self.pg_conn.cursor()
         cursor.execute(query)
-        return set(x[0] for x in cursor.fetchall())
+        return list(x[0] for x in cursor.fetchall())
 
-    def apt_exists(self, identifier):
+    def set_archived(self, url):
         cursor = self.pg_conn.cursor()
-        where_clause = self.unique_where(identifier)
-        query = u'select exists(select 1 from {0} {1})'.format(self.default_table, where_clause)
+        update = u"update {table} set archived = TRUE where url = '{url}'".format(table=self.table, url=url)
         try:
-            cursor.execute(query)
+            cursor.execute(update)
+            self.pg_conn.commit()
         except Exception as e:
             self.pg_conn.rollback()
-            if str(e.pgcode) == str(psycopg2.errorcodes.UNDEFINED_COLUMN):
-                return False
             raise
-        return cursor.fetchone()[0]
+        return True
 
     @conversion
     def convert_list(self, val):
