@@ -85,12 +85,14 @@ class Parser(object):
             logging.error('failed to parse BeautifulSoup for {url}. \n'
                           'Encountered error: {e}'.format(url=url, e=e))
             if e.response.status_code == 403:
+                logging.error('STATUS CODE 403 FORBIDDEN FOR {url} ON {proxy}'.format(url=url, proxy=proxy))
                 raise
             return None
 
         soup = BeautifulSoup(html, self.bs4_parsing)
         soup.attrs['url'] = url
         if self.has_captcha(soup):
+            logging.error('ENCOUNTERED CAPTCHA ON {proxy}'.format(proxy=proxy))
             raise Captcha()
         return soup
 

@@ -1,6 +1,7 @@
 import math
 import json
 import inspect
+import logging
 import psycopg2
 from datetime import datetime
 from psycopg2 import errorcodes
@@ -71,6 +72,7 @@ class pgSQL(object):
             elif str(e.pgcode) == str(psycopg2.errorcodes.UNIQUE_VIOLATION):
                 return False
             else:
+                logging.error(e)
                 raise
         self.pg_conn.commit()
         return True
@@ -94,6 +96,7 @@ class pgSQL(object):
                 self.pg_conn.commit()
             except Exception as e:
                 self.pg_conn.rollback()
+                logging.error(e)
                 raise
         return True
 
@@ -119,6 +122,7 @@ class pgSQL(object):
                 if str(e.pgcode) == str(psycopg2.errorcodes.UNDEFINED_COLUMN):
                     missing_fields.append(field)
                 else:
+                    logging.error(e)
                     raise
         return missing_fields
 
@@ -136,6 +140,7 @@ class pgSQL(object):
             self.pg_conn.commit()
         except Exception as e:
             self.pg_conn.rollback()
+            logging.error(e)
             raise
         return True
 
