@@ -16,7 +16,7 @@ if __name__ == '__main__':
     parser = Gesucht(config)
     SQL = pgSQL(config['postgreSQL'])
 
-    listings = parser.get_listings(n=20)
+    listings = parser.get_listings(n=60)
     existing_listings = SQL.get_active_listings()
     new_listings = set(listings) - set(existing_listings)
 
