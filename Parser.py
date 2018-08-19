@@ -1,11 +1,12 @@
 import re
 import time
-import inspect
 import urllib
+import inspect
 import logging
+import requests
 import googlemaps
-import urllib.parse
 import dateutil.parser
+from itertools import cycle
 
 from functools import reduce
 from bs4 import BeautifulSoup
@@ -15,7 +16,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from abc import ABCMeta, abstractmethod
-from utils import ProxyHandler
 
 
 def metric(f):
@@ -23,7 +23,7 @@ def metric(f):
         try:
             return f(self, soup)
         except Exception as e:
-            logging.error(e)
+            logging.error('Error in metric {name}: {error}'.format(name=f.__name__, error=e))
         return {}
 
     g.is_metric = True
@@ -39,21 +39,37 @@ class Parser(object):
     __metaclass__ = ABCMeta
 
     timeout = 5
-    proxy_handler = None
+    proxies = None
     bs4_parsing = 'html5lib'
 
     def __init__(self, config):
-        options = webdriver.ChromeOptions()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-
-        self.selenium = webdriver.Chrome(executable_path=config['webdriver_path'], chrome_options=options)
 
         methods = inspect.getmembers(self, predicate=inspect.ismethod)
         self.metric_methods = [method for (name, method) in methods if 'is_metric' in dir(method)]
-        self.gmaps = googlemaps.Client(key=config['google_api_key'])
-        self.search_urls = config['searches']
+
+        if 'proxies' in config:
+            proxies = config['proxies']
+            proxies = [{'https': 'https://{proxy}'.format(proxy=proxy)} for proxy in proxies]
+            self.proxies = cycle(proxies)
+
+        if 'logfile' in config:
+            logging.basicConfig(filename=config['logfile'],
+                                format='%(asctime)s %(levelname)s %(message)s',
+                                filemode='a+',
+                                level=logging.INFO)
+
+        if 'searches' in config:
+            self.search_urls = config['searches']
+
+        if 'google_api_key' in config:
+            self.gmaps = googlemaps.Client(key=config['google_api_key'])
+
+        if 'webdriver_path' in config:
+            options = webdriver.ChromeOptions()
+            options.add_argument('--headless')
+            options.add_argument('--no-sandbox')
+            options.add_argument('--disable-dev-shm-usage')
+            self.selenium = webdriver.Chrome(executable_path=config['webdriver_path'], chrome_options=options)
 
     def parse_listing(self, url):
         soup = self.soup(url)
@@ -62,15 +78,13 @@ class Parser(object):
 
     def soup(self, url):
         try:
-            if self.proxy_handler:
-                proxy = self.proxy_handler.get_proxy()
-                html = proxy.open(url).read()
-            else:
-                html = urllib.request.urlopen(url).read()
-        except urllib.error.HTTPError as e:
+            proxy = next(self.proxies) if self.proxies else {}
+            request = requests.get(url, proxies=proxy)
+            html = request.content
+        except requests.exceptions.HTTPError as e:
             logging.error('failed to parse BeautifulSoup for {url}. \n'
                           'Encountered error: {e}'.format(url=url, e=e))
-            if e.code == 403:
+            if e.response.status_code == 403:
                 raise
             return None
 
@@ -250,8 +264,7 @@ class Gesucht(Parser):
         pairs = filter(lambda item: item[0] != u'https://www.wg-gesucht.de/img/d.gif', pairs)
         urls, desc = map(list, zip(*pairs))
 
-        # retrun None for desc if all ''
-
+        # TODO retrun None for desc if all ''
         return {'image_urls': urls, 'image_descriptions': desc}
 
     @metric

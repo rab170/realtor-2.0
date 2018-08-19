@@ -19,15 +19,15 @@ def conversion(f):
     return g
 
 
-
 class pgSQL(object):
+
     pg_conn = None
     conversion_methods = {}
 
     nan = 'nan'
     str_token = '$TOKEN$'
 
-    TYPES = {int: 'int4', list: 'text', float: 'float4', str: 'text', 
+    TYPES = {int: 'int4', map: 'text', list: 'text', float: 'float4', str: 'text',
              datetime: 'timestamp', bool: 'bool'}
 
     def __init__(self, db_config, table='hamburg'):
