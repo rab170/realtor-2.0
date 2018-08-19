@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import sys
 import time
 import yaml
 import random
@@ -10,7 +11,7 @@ from pgSQL_handler import pgSQL
 
 if __name__ == '__main__':
 
-    with open('config.yaml') as f:
+    with open(sys.argv[1]) as f:
         config = yaml.load(f)
 
     parser = Gesucht(config)
@@ -18,7 +19,7 @@ if __name__ == '__main__':
 
     existing_listings = SQL.get_active_listings()
 
-    for listing in existing_listings[:100]:
+    for listing in existing_listings:
         if parser.is_active(listing):
             logging.info('archiving inactive listing {url}'.format(url=listing))
             SQL.archive(listing)
