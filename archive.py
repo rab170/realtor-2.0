@@ -1,11 +1,25 @@
 #!/usr/bin/env python
-from apartment_finder.data_collection.craigslist_rss import AptFeed
+
+import time
+import yaml
+import random
+import logging
+
+from Parser import Gesucht
+from pgSQL_handler import pgSQL
 
 if __name__ == '__main__':
 
-    # this forces the listing to have a picture AND square footage
-    # consider changing to allow for no square footage...much harder
-    # to extract bedroom and size metrics..but may lose some gems
+    with open('config.yaml') as f:
+        config = yaml.load(f)
 
-    parser = AptFeed('', '', '~/proxies', 'apartment_listings','an0nym1ty' )
-    parser.archive()
+    parser = Gesucht(config)
+    SQL = pgSQL(config['postgreSQL'])
+
+    existing_listings = SQL.get_active_listings()
+
+    for listing in existing_listings[:100]:
+        if parser.is_active(listing):
+            logging.info('archiving inactive listing {url}'.format(url=listing))
+            SQL.archive(listing)
+        time.sleep(random.uniform(0, 3))

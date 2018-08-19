@@ -25,9 +25,4 @@ if __name__ == '__main__':
         logging.info('{url} parsed'.format(url=listing))
         SQL.insert(metrics)
         logging.info('{url} inserted to postgreSQL'.format(url=listing))
-        time.sleep(random.uniform(3, 8))
-
-    #for listing in existing_listings[:100]:
-    #    if parser.is_active(listing):
-    #        SQL.archive(listing)
-    #        time.sleep(random.uniform(5, 10))
+        time.sleep(random.uniform(0, 3))
