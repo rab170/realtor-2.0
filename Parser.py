@@ -108,9 +108,6 @@ class Parser(object):
     def is_active(self, url):
         pass
 
-    def __del__(self):
-        self.selenium.quit()
-
     def __exit__(self, exc_type, exc_value, traceback):
         self.selenium.quit()
 
