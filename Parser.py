@@ -105,7 +105,7 @@ class Parser(object):
         pass
 
     @abstractmethod
-    def is_active(self, url):
+    def is_deactivated(self, url):
         pass
 
     def __del__(self):

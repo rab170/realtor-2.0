@@ -127,7 +127,7 @@ class pgSQL(object):
         return missing_fields
 
     def get_active_listings(self):
-        query = 'select url from {table} where archived = False order by timestamp'.format(table=self.table)
+        query = 'select url from {table} where archived = False order by random()'.format(table=self.table)
         cursor = self.pg_conn.cursor()
         cursor.execute(query)
         return list(x[0] for x in cursor.fetchall())

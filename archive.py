@@ -19,8 +19,8 @@ if __name__ == '__main__':
 
     existing_listings = SQL.get_active_listings()
 
-    for listing in existing_listings:
-        if parser.is_active(listing):
+    for listing in existing_listings[0:100]:
+        if parser.is_deactivated(listing):
             logging.info('archiving inactive listing {url}'.format(url=listing))
-            SQL.archive(listing)
+            SQL.set_archived(listing)
         time.sleep(random.uniform(0, 3))
