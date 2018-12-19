@@ -1,4 +1,5 @@
 import re
+import math
 import time
 import urllib
 import inspect
@@ -41,10 +42,28 @@ class Parser(object):
     proxies = None
     bs4_parsing = 'html5lib'
 
+    SEARCH_RADIUS = 750
+    MAX_DISTANCE = 3*SEARCH_RADIUS
+
+    GOOGLE_PLACES_URL = 'www.google.com/maps/search/?api=1&query=Google&query_place_id={place_id}'
+    GOOGLE_PLACES_FIELDS = ['name','types', 'place_id', 'distance', 'rating']
+
+    GOOGLE_SEARCHES = { 'trains': None,
+                        'markets': 'grocery stores and markets',
+                        'kiosks': 'kiosk',
+                        'parks': None}
+
+    GOOGLE_SEARCH_TYPES = { 'trains':['subway_station', 'train_station'],
+                            'markets':['store', 'supermarket', 'convenience_store'],
+                            'kiosks': [],
+                            'parks': ['park']}
+
     def __init__(self, config):
+
 
         methods = inspect.getmembers(self, predicate=inspect.ismethod)
         self.metric_methods = [method for (name, method) in methods if 'is_metric' in dir(method)]
+        self.GOOGLE_SEARCH_TYPES = {k:'|'.join(v) for k, v in self.GOOGLE_SEARCH_TYPES.items()}
 
         if 'proxies' in config:
             proxies = config['proxies']
@@ -94,6 +113,44 @@ class Parser(object):
             logging.error('ENCOUNTERED CAPTCHA ON {proxy}'.format(proxy=proxy))
             raise Captcha()
         return soup
+
+    def google_places(self, apartment_coordinates):
+
+        places = set(self.GOOGLE_SEARCHES).intersection(self.GOOGLE_SEARCH_TYPES)
+        search_params = {name: (self.GOOGLE_SEARCHES[name], self.GOOGLE_SEARCH_TYPES[name]) for name in places}
+        places = {k: [] for k in places}
+
+        for name, (text, types) in search_params.items():
+
+            search = self.gmaps.places(text, type=types, location=apartment_coordinates, radius=self.SEARCH_RADIUS)
+
+            for place in search['results']:
+
+                location = place['geometry']['location']
+                place['distance'] = self.coordinate_distance(location, apartment_coordinates)
+                place['url'] = self.GOOGLE_PLACES_URL.format(place_id=place['place_id'])
+
+                if place['distance'] <= self.MAX_DISTANCE:
+                    fields = {field: place[field] for field in self.GOOGLE_PLACES_FIELDS if field in place}
+                    places[name].append({**location, **fields})
+                places[name] = sorted(places[name], key=lambda place: place['distance'])
+
+        return places
+
+    @staticmethod
+    def coordinate_distance(A, B):
+        r_earth = 6371000
+        deg = lambda rad: math.pi*rad/180
+
+        delta = {}
+        for dim in ['lat', 'lng']:
+            delta[dim] = deg(A[dim] - B[dim])
+
+        a = deg(A['lat'])*deg(B['lat'])
+        b =   math.sin(delta['lat']/2)**2 + \
+            a*math.sin(delta['lng']/2)**2
+        c = 2*math.atan2(b**0.5, (1-b)**0.5)
+        return r_earth*c
 
     @abstractmethod
     def get_listings(self, listing_url):
@@ -214,8 +271,9 @@ class Gesucht(Parser):
 
         geocode_result = self.gmaps.geocode(address)
         geo = geocode_result[0]['geometry']['location']
+        places = self.google_places(geo)
 
-        return {'address': address, **geo}
+        return {'address': address, **geo, **places}
 
     @metric
     def get_listing_info(self, soup):
