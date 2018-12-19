@@ -17,7 +17,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from abc import ABCMeta, abstractmethod
 
-
 def metric(f):
     def g(self, soup):
         try:
@@ -139,12 +138,13 @@ class Gesucht(Parser):
             n_pages = int(n/self.listings_per_page) + 1
             for page in range(n_pages):
                 page = self.soup(url.format(page=page))
-                ad_ids = page.findAll('tr', {'adid': re.compile(r'.*')})
-                ad_ids = map(lambda listing: listing['adid'], ad_ids)
-                ad_urls = map(lambda relative_url: urllib.parse.urljoin(self.domain, relative_url), ad_ids)
-
-                # Drop first 2 listings. They're ads
-                listings = listings.union(list(ad_urls)[2:])
+                end_dates = [end_date.a.text.strip() for end_date in page.findAll('td', {'class':'ang_spalte_freibis row_click'})]
+                
+                ad_ids = [listing['adid'] for listing in page.findAll('tr', {'adid': re.compile(r'.*')})][2:]  # Drop first 2 listings. They're ads
+                ad_urls = [urllib.parse.urljoin(self.domain, relative_url) for relative_url in ad_ids]
+                ad_urls = [url for url, end_date in zip(ad_urls, end_dates) if not end_date] # Drop all sublets
+                
+                listings = listings.union(ad_urls)
         return list(listings)[:n]
 
     def has_captcha(self, soup):
@@ -215,8 +215,7 @@ class Gesucht(Parser):
         geocode_result = self.gmaps.geocode(address)
         geo = geocode_result[0]['geometry']['location']
 
-        # (geo['lat'], geo['lng'])
-        return {'address': address, 'lat': geo['lat'], 'long': geo['lng']}
+        return {'address': address, **geo}
 
     @metric
     def get_listing_info(self, soup):
