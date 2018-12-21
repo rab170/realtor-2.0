@@ -7,7 +7,9 @@ import logging
 import requests
 import googlemaps
 import dateutil.parser
+
 from itertools import cycle
+from collections import OrderedDict
 
 from functools import reduce
 from bs4 import BeautifulSoup
@@ -17,6 +19,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from abc import ABCMeta, abstractmethod
+
 
 def metric(f):
     def g(self, soup):
@@ -189,20 +192,36 @@ class Gesucht(Parser):
         return False
 
     def get_listings(self, n=listings_per_page):
-        listings = set()
+
+        listings = {}
 
         for url in self.search_urls:
-            n_pages = int(n/self.listings_per_page) + 1
-            for page in range(n_pages):
-                page = self.soup(url.format(page=page))
-                end_dates = [end_date.a.text.strip() for end_date in page.findAll('td', {'class':'ang_spalte_freibis row_click'})]
-                
-                ad_ids = [listing['adid'] for listing in page.findAll('tr', {'adid': re.compile(r'.*')})][2:]  # Drop first 2 listings. They're ads
-                ad_urls = [urllib.parse.urljoin(self.domain, relative_url) for relative_url in ad_ids]
-                ad_urls = [url for url, end_date in zip(ad_urls, end_dates) if not end_date] # Drop all sublets
-                
-                listings = listings.union(ad_urls)
-        return list(listings)[:n]
+
+            page_number = 0
+            listings[url] = OrderedDict()
+
+            while len(listings[url]) < n:
+                page = self.soup(url.format(page=page_number))
+
+                filters = {'end_date': {'class': 'ang_spalte_freibis row_click'},
+                           'location': {'class': re.compile(r'.*ang_spalte_stadt.*')}}
+
+                for key, F in filters.items():
+                    filters[key] = [elem.a.text.strip() for elem in page.findAll('td', F)]
+
+                page_ids = [listing['adid'] for listing in page.findAll('tr', {'adid': re.compile(r'.*')})]
+
+                page_ids = [page_id for page_id, location in zip(page_ids, filters['location']) if '*' not in location]
+                page_ids = [page_id for page_id, end_date in zip(page_ids, filters['end_date']) if end_date == '']
+
+                page_urls = [urllib.parse.urljoin(self.domain, relative_url) for relative_url in page_ids]
+
+                page_urls = OrderedDict.fromkeys(page_urls)
+                listings[url].update(page_urls)
+                page_number += 1
+
+        return [url for listings in listings.values() for url in list(listings)[:n]]
+
 
     def has_captcha(self, soup):
         if soup.find('div', {'class': 'g-recaptcha'}):
