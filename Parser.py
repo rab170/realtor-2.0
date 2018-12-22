@@ -43,7 +43,7 @@ class Parser(object):
 
     timeout = 5
     proxies = None
-    bs4_parsing = 'html5lib'
+    bs4_parsing = 'html.parser'
 
     SEARCH_RADIUS = 750
     MAX_DISTANCE = 3*SEARCH_RADIUS
@@ -204,7 +204,7 @@ class Gesucht(Parser):
                 page = self.soup(url.format(page=page_number))
 
                 filters = {'end_date': {'class': 'ang_spalte_freibis row_click'},
-                           'location': {'class': re.compile(r'.*ang_spalte_stadt.*')}}
+                           'location': {'class': re.compile(r'ang_spalte_stadt.*')}}
 
                 for key, F in filters.items():
                     filters[key] = [elem.a.text.strip() for elem in page.findAll('td', F)]
@@ -245,39 +245,34 @@ class Gesucht(Parser):
     def get_size_metrics(self, soup):
         def f(s): return re.sub('\s\s+', '', s.text)
 
-        k = u'Zimmergr\xf6\xdfe'
-
         key_facts = soup.findAll('h2', {'class': 'headline headline-key-facts'})
         fact_types = soup.findAll('h3', {'class': 'headline headline-key-facts'})
 
-        res = {f(k): f(v) for k, v in zip(fact_types, key_facts)}
-        res[k] = int(res[k].replace(u'm\xb2', ''))
+        facts = {f(k): f(v) for k, v in zip(fact_types, key_facts)}
+        facts = {k: v for k, v in facts.items() if k in [u'Zimmergr\xf6\xdfe', u'Gr\xf6\xdfe']}
 
-        return {'square_meters': res[k]}
+        k, size = facts.popitem()
+
+        return {'square_meters': int(size.replace(u'm\xb2', ''))}
 
     @metric
     def get_wg_info(self, soup):
         def clean(s): return re.sub('\s\s+', '', s.text)
-        divs = soup.findAll('div', {'class': 'col-sm-6'})
-        names = map(lambda element: element.find('h4', {'class': 'headline headline-detailed-view-datasheet'}), divs)
-        names = map(clean, names)
-        names = list(names)
 
-        div = divs[names.index(u'Die WG')]
-        wg_details = div.find('ul', {'class': 'ul-detailed-view-datasheet print_text_left'}).findAll('li')
-        wg_details = map(clean, wg_details)
+        wg_details = soup.find('ul', {'class': 'ul-detailed-view-datasheet print_text_left'}).findAll('li')
+        wg_details = [clean(li).lower() for li in wg_details]
+        wg_details = ' '.join(wg_details)
 
-        regex = {'WG_size': re.compile(r'(?P<WG_size>[0-9])er WG'),
-                 'languages': re.compile(r'Sprache/n:(?P<languages>.*)')}
-        processing = {'WG_size': int, 'languages': lambda s: s.split(',')}
+        processing = {'WG_size': int,
+                      'languages': lambda langauges: langauges.split(',')}
+
+        regex = {'WG_size': re.compile(r'.*(?P<WG_size>[0-9])er wg.*'),
+                 'languages': re.compile(r'.*sprach.*:(?P<languages>.*)')}
 
         res = {}
         for backref, pattern in regex.items():
-            hits = map(lambda s: pattern.search(s), wg_details)
-            hits = filter(lambda hit: hit is not None, hits)
-            hits = map(lambda hit: hit.group(backref), hits)
-
-            hits = set(hits)
+            hits = pattern.search(wg_details)
+            hits = set(hits.groups(backref))
             if len(hits) == 1:
                 res[backref] = processing[backref](hits.pop())
         return res
@@ -301,12 +296,19 @@ class Gesucht(Parser):
         h3s = map(lambda h3: h3.text.strip() if h3 else h3, h3s)
         h3s = list(h3s)
 
-        description = divs[h3s.index(u'Anzeigentext')]
-        description = re.sub('\s\s+', '\n', description.text.strip())
+        description = ''
+        if u'Anzeigentext' in h3s:
+            description = divs[h3s.index(u'Anzeigentext')]
+            description = re.sub('\s\s+', '\n', description.text.strip())
+        else:
+            texts = soup.findAll('div', {'id': 'freitext_0'})
+            if texts:
+                description = '\n'.join([div.text for div in texts])
 
-        details = divs[h3s.index(u'Angaben zum Objekt')]
-        details = details.findAll('div', {'class': 'col-xs-6 col-sm-4 text-center print_text_left'})
-        details = map(lambda item: re.sub('\s\s+', ' ', item.text).strip(), details)
+        if 'Angaben zum Objekt':
+            details = divs[h3s.index(u'Angaben zum Objekt')]
+            details = details.findAll('div', {'class': 'col-xs-6 col-sm-4 text-center print_text_left'})
+            details = map(lambda item: re.sub('\s\s+', ' ', item.text).strip(), details)
 
         return {'description': description, 'details': details}
 
