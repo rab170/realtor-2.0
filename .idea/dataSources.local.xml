@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="dataSourceStorageLocal">
+    <data-source name="realtor@ns3000144.ip-5-196-74.eu" uuid="289ce7c4-c113-44ed-b7d7-791ef954707e">
+      <database-info product="PostgreSQL" version="9.5.14" jdbc-version="4.2" driver-name="PostgreSQL JDBC Driver" driver-version="42.2.2">
+        <identifier-quote-string>&quot;</identifier-quote-string>
+      </database-info>
+      <case-sensitivity plain-identifiers="lower" quoted-identifiers="exact" />
+      <user-name>an0nym1ty</user-name>
+      <introspection-schemas>realtor:public</introspection-schemas>
+    </data-source>
+  </component>
+</project>

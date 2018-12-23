@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
+    <data-source source="LOCAL" name="realtor@ns3000144.ip-5-196-74.eu" uuid="289ce7c4-c113-44ed-b7d7-791ef954707e">
+      <driver-ref>postgresql</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>org.postgresql.Driver</jdbc-driver>
+      <jdbc-url>jdbc:postgresql://ns3000144.ip-5-196-74.eu:5432/realtor</jdbc-url>
+    </data-source>
+  </component>
+</project>

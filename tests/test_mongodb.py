@@ -5,8 +5,7 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import pprint
-from scrape.mongo_handler import Mongo
+from scraper.mongo_handler import Mongo
 
 class TestMongo(unittest.TestCase):
 

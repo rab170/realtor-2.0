@@ -8,8 +8,8 @@ import logging
 
 import pprint
 
-from scrape.Parser import Gesucht
-from scrape.mongo_handler import Mongo
+from scraper.Parser import Gesucht
+from scraper.mongo_handler import Mongo
 
 if __name__ == '__main__':
 
