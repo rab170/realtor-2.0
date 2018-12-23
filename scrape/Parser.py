@@ -1,6 +1,7 @@
 import re
 import math
 import time
+import random
 import urllib
 import inspect
 import logging
@@ -51,22 +52,12 @@ class Parser(object):
     GOOGLE_PLACES_URL = 'www.google.com/maps/search/?api=1&query=Google&query_place_id={place_id}'
     GOOGLE_PLACES_FIELDS = ['name','types', 'place_id', 'distance', 'rating']
 
-    GOOGLE_SEARCHES = { 'trains': None,
-                        'markets': 'grocery stores and markets',
-                        'kiosks': 'kiosk',
-                        'parks': None}
-
-    GOOGLE_SEARCH_TYPES = { 'trains':['subway_station', 'train_station'],
-                            'markets':['store', 'supermarket', 'convenience_store'],
-                            'kiosks': [],
-                            'parks': ['park']}
 
     def __init__(self, config):
 
 
         methods = inspect.getmembers(self, predicate=inspect.ismethod)
         self.metric_methods = [method for (name, method) in methods if 'is_metric' in dir(method)]
-        self.GOOGLE_SEARCH_TYPES = {k:'|'.join(v) for k, v in self.GOOGLE_SEARCH_TYPES.items()}
 
         if 'proxies' in config:
             proxies = config['proxies']
@@ -92,9 +83,16 @@ class Parser(object):
             options.add_argument('--disable-dev-shm-usage')
             self.selenium = webdriver.Chrome(executable_path=config['webdriver_path'], chrome_options=options)
 
+        if 'GOOGLE_SEARCHES' in config:
+            self.GOOGLE_SEARCHES = config['GOOGLE_SEARCHES']
+
+        if 'GOOGLE_SEARCH_TYPES' in config:
+            self.GOOGLE_SEARCH_TYPES = config['GOOGLE_SEARCH_TYPES']
+
     def parse_listing(self, url):
         soup = self.soup(url)
         metrics = map(lambda f: f(soup), self.metric_methods)
+        logging.info('{url} parsed'.format(url=url))
         return reduce(lambda a, b: dict(a, **b), metrics)
 
     def soup(self, url):
@@ -115,6 +113,8 @@ class Parser(object):
         if self.has_captcha(soup):
             logging.error('ENCOUNTERED CAPTCHA ON {proxy}'.format(proxy=proxy))
             raise Captcha()
+
+        time.sleep(random.uniform(0, 3))
         return soup
 
     def google_places(self, apartment_coordinates):
@@ -124,19 +124,19 @@ class Parser(object):
         places = {k: [] for k in places}
 
         for name, (text, types) in search_params.items():
+            for T in types:
+                search = self.gmaps.places(text, type=T, location=apartment_coordinates, radius=self.SEARCH_RADIUS)
 
-            search = self.gmaps.places(text, type=types, location=apartment_coordinates, radius=self.SEARCH_RADIUS)
+                for place in search['results']:
 
-            for place in search['results']:
+                    location = place['geometry']['location']
+                    place['distance'] = self.coordinate_distance(location, apartment_coordinates)
+                    place['url'] = self.GOOGLE_PLACES_URL.format(place_id=place['place_id'])
 
-                location = place['geometry']['location']
-                place['distance'] = self.coordinate_distance(location, apartment_coordinates)
-                place['url'] = self.GOOGLE_PLACES_URL.format(place_id=place['place_id'])
-
-                if place['distance'] <= self.MAX_DISTANCE:
-                    fields = {field: place[field] for field in self.GOOGLE_PLACES_FIELDS if field in place}
-                    places[name].append({**location, **fields})
-                places[name] = sorted(places[name], key=lambda place: place['distance'])
+                    if place['distance'] <= self.MAX_DISTANCE:
+                        fields = {field: place[field] for field in self.GOOGLE_PLACES_FIELDS if field in place}
+                        places[name].append({**location, **fields})
+                    places[name] = sorted(places[name], key=lambda place: place['distance'])
 
         return places
 
@@ -238,7 +238,6 @@ class Gesucht(Parser):
         values = soup.find('div', {'class': 'col-sm-5'}).findAll('b')[0:len(names)]
         values = map(lambda s: s.text.replace(u'\u20ac', ''), values)
         values = map(lambda s: s.replace('n.a.', '0'), values)
-
         return {k: int(v) for k, v in zip(names, values)}
 
     @metric
@@ -308,7 +307,7 @@ class Gesucht(Parser):
         if 'Angaben zum Objekt':
             details = divs[h3s.index(u'Angaben zum Objekt')]
             details = details.findAll('div', {'class': 'col-xs-6 col-sm-4 text-center print_text_left'})
-            details = map(lambda item: re.sub('\s\s+', ' ', item.text).strip(), details)
+            details = [re.sub('\s\s+', ' ', item.text).strip() for item in details]
 
         return {'description': description, 'details': details}
 
