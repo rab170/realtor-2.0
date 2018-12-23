@@ -3,10 +3,7 @@
 import sys
 import time
 import yaml
-import random
 import logging
-
-import pprint
 
 from scraper.Parser import Gesucht
 from scraper.mongo_handler import Mongo
@@ -19,7 +16,7 @@ if __name__ == '__main__':
     parser = Gesucht(config)
     mongo = Mongo(config['mongo'])
 
-    listings = parser.get_listings(n=20)
+    listings = parser.get_listings(n=50)
     existing_listings = mongo.get_existing_urls(listings)
     new_listings = set(listings) - set(existing_listings)
     t0 =  time.time()

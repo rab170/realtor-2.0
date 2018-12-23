@@ -92,7 +92,6 @@ class Parser(object):
     def parse_listing(self, url):
         soup = self.soup(url)
         metrics = map(lambda f: f(soup), self.metric_methods)
-        logging.info('{url} parsed'.format(url=url))
         return reduce(lambda a, b: dict(a, **b), metrics)
 
     def soup(self, url):
@@ -111,10 +110,11 @@ class Parser(object):
         soup = BeautifulSoup(html, self.bs4_parsing)
         soup.attrs['url'] = url
         if self.has_captcha(soup):
-            logging.error('ENCOUNTERED CAPTCHA ON {proxy}'.format(proxy=proxy))
+            logging.error('ENCOUNTERED CAPTCHA ON {proxy} fetching {url}'.format(url=url, proxy=proxy))
             raise Captcha()
 
-        time.sleep(random.uniform(0, 3))
+        logging.info('{url} parsed'.format(url=url))
+        time.sleep(self.timeout)
         return soup
 
     def google_places(self, apartment_coordinates):
@@ -214,13 +214,18 @@ class Gesucht(Parser):
                 page_ids = [page_id for page_id, location in zip(page_ids, filters['location']) if '*' not in location]
                 page_ids = [page_id for page_id, end_date in zip(page_ids, filters['end_date']) if end_date == '']
 
+                if any(end_date == 'vermietet' for end_date in filters['end_date']):
+                    break
+
                 page_urls = [urllib.parse.urljoin(self.domain, relative_url) for relative_url in page_ids]
 
                 page_urls = OrderedDict.fromkeys(page_urls)
                 listings[url].update(page_urls)
                 page_number += 1
 
-        return [url for listings in listings.values() for url in list(listings)[:n]]
+                len(listings[url])
+
+        return [url for listings in listings.values() for url in list(listings)[:min(n, len(listings))]]
 
 
     def has_captcha(self, soup):
