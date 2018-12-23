@@ -3,3 +3,4 @@ data/
 scraper/config/*.yaml
 scraper/__pycache__/
 .idea/
+.ipynb_checkpoints/
