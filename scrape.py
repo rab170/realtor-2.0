@@ -23,7 +23,6 @@ if __name__ == '__main__':
     existing_listings = mongo.get_existing_urls(listings)
     new_listings = set(listings) - set(existing_listings)
     t0 =  time.time()
-    new_listings = ['https://www.wg-gesucht.de/wg-zimmer-in-Hamburg-Ottensen.7037177.html']
     for listing in new_listings:
         metrics = parser.parse_listing(listing)
         mongo.insert(metrics)
