@@ -6,8 +6,10 @@ import yaml
 import random
 import logging
 
-from .Parser import Gesucht
-from .mongo_handler import Mongo
+import pprint
+
+from scrape.Parser import Gesucht
+from scrape.mongo_handler import Mongo
 
 if __name__ == '__main__':
 
@@ -21,11 +23,8 @@ if __name__ == '__main__':
     existing_listings = mongo.get_existing_urls(listings)
     new_listings = set(listings) - set(existing_listings)
     t0 =  time.time()
-
+    new_listings = ['https://www.wg-gesucht.de/wg-zimmer-in-Hamburg-Ottensen.7037177.html']
     for listing in new_listings:
         metrics = parser.parse_listing(listing)
-        logging.info('{url} parsed'.format(url=listing))
         mongo.insert(metrics)
-        logging.info('{url} inserted to postgreSQL'.format(url=listing))
-        time.sleep(random.uniform(0, 3))
     logging.info('PARSE COMPLETED: {n} cases, {t} seconds'.format(n=len(new_listings), t=time.time()-t0))
