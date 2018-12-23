@@ -1,6 +1,6 @@
 venv/
 data/
-scraper/config/*.yaml
+scraper/config/
 scraper/__pycache__/
 .idea/
 .ipynb_checkpoints/
