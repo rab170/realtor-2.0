@@ -6,8 +6,8 @@ import yaml
 import random
 import logging
 
-from Parser import Gesucht
-from pgSQL_handler import pgSQL
+from .Parser import Gesucht
+from .mongo_handler import Mongo
 
 if __name__ == '__main__':
 
@@ -15,17 +15,17 @@ if __name__ == '__main__':
         config = yaml.load(f)
 
     parser = Gesucht(config)
-    SQL = pgSQL(config['postgreSQL'])
+    mongo = Mongo(config['mongo'])
 
-    listings = parser.get_listings(n=60)
-    existing_listings = SQL.get_active_listings()
+    listings = parser.get_listings(n=20)
+    existing_listings = mongo.get_existing_urls(listings)
     new_listings = set(listings) - set(existing_listings)
     t0 =  time.time()
 
     for listing in new_listings:
         metrics = parser.parse_listing(listing)
         logging.info('{url} parsed'.format(url=listing))
-        SQL.insert(metrics)
+        mongo.insert(metrics)
         logging.info('{url} inserted to postgreSQL'.format(url=listing))
         time.sleep(random.uniform(0, 3))
     logging.info('PARSE COMPLETED: {n} cases, {t} seconds'.format(n=len(new_listings), t=time.time()-t0))
