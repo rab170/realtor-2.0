@@ -1,4 +1,4 @@
 venv/
 data/
 scraper/config/*.yaml
-scraper/__pycache__/
+scraper/__pycache__/.idea/
