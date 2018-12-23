@@ -276,7 +276,7 @@ class Gesucht(Parser):
         res = {}
         for backref, pattern in regex.items():
             hits = pattern.search(wg_details)
-            hits = set(hits.groups(backref))
+            hits = set(hits.groups(backref)) if hits else []
             if len(hits) == 1:
                 res[backref] = processing[backref](hits.pop())
         return res
