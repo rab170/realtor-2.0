@@ -46,8 +46,8 @@ class Parser(object):
     proxies = None
     bs4_parsing = 'html.parser'
 
+    MAX_DISTANCE  = 1500
     SEARCH_RADIUS = 750
-    MAX_DISTANCE = 3*SEARCH_RADIUS
 
     GOOGLE_PLACES_URL = 'www.google.com/maps/search/?api=1&query=Google&query_place_id={place_id}'
     GOOGLE_PLACES_FIELDS = ['name','types', 'place_id', 'distance', 'rating']
@@ -121,22 +121,25 @@ class Parser(object):
 
         places = set(self.GOOGLE_SEARCHES).intersection(self.GOOGLE_SEARCH_TYPES)
         search_params = {name: (self.GOOGLE_SEARCHES[name], self.GOOGLE_SEARCH_TYPES[name]) for name in places}
-        places = {k: [] for k in places}
+        places = {k: {} for k in places}
 
         for name, (text, types) in search_params.items():
+
             for T in types:
                 search = self.gmaps.places(text, type=T, location=apartment_coordinates, radius=self.SEARCH_RADIUS)
 
                 for place in search['results']:
 
+                    place_id = place['place_id']
                     location = place['geometry']['location']
                     place['distance'] = self.coordinate_distance(location, apartment_coordinates)
                     place['url'] = self.GOOGLE_PLACES_URL.format(place_id=place['place_id'])
 
                     if place['distance'] <= self.MAX_DISTANCE:
                         fields = {field: place[field] for field in self.GOOGLE_PLACES_FIELDS if field in place}
-                        places[name].append({**location, **fields})
-                    places[name] = sorted(places[name], key=lambda place: place['distance'])
+                        places[name][place_id] = {**location, **fields}
+
+            places[name] = sorted(places[name].values(), key=lambda place: place['distance'])
 
         return places
 
