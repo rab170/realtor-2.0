@@ -297,6 +297,10 @@ class Gesucht(Parser):
         return {'address': address, **geo, **places}
 
     @metric
+    def get_title(self, soup):
+        return {'title': soup.title.text}
+
+    @metric
     def get_listing_info(self, soup):
         divs = soup.findAll('div', {'class': 'col-xs-12'})
         h3s = map(lambda div: div.find('h3', {'class': 'headline headline-detailed-view-panel-title'}), divs)
@@ -337,12 +341,14 @@ class Gesucht(Parser):
             time.sleep(self.timeout)
 
             thumbnails = self.selenium.find_elements_by_class_name('sp-thumbnail')
+
             if len(thumbnails):
                 urls = map(lambda thumbnail: thumbnail.get_attribute('src'), thumbnails)
                 urls = map(lambda s: s.replace('thumb', 'large'), urls)
                 desc = map(lambda thumbnail: thumbnail.get_attribute('alt'), thumbnails)
             else:
                 thumbnails = self.selenium.find_elements_by_class_name('sp-image')[1:]
+
                 if len(thumbnails):
                     urls = map(lambda thumbnail: thumbnail.get_attribute('src'), thumbnails)
                     desc = map(lambda thumbnail: thumbnail.get_attribute('alt'), thumbnails)
