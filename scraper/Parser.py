@@ -312,7 +312,7 @@ class Gesucht(Parser):
             description = divs[h3s.index(u'Anzeigentext')]
             description = re.sub('\s\s+', '\n', description.text.strip())
         else:
-            texts = soup.findAll('div', {'id': 'freitext_0'})
+            texts = soup.findAll('div', {'id': re.compile(r'freitext_[0-9]')})
             if texts:
                 description = '\n'.join([div.text for div in texts])
 
