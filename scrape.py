@@ -16,10 +16,11 @@ if __name__ == '__main__':
     parser = Gesucht(config)
     mongo = Mongo(config['mongo'])
 
-    listings = parser.get_listings(n=50)
+    listings = parser.get_listings(n=10)
     existing_listings = mongo.get_existing_urls(listings)
     new_listings = set(listings) - set(existing_listings)
     t0 =  time.time()
+    logging.info('parsing {n} new cases'.format(n=len(new_listings)))
     for listing in new_listings:
         metrics = parser.parse_listing(listing)
         mongo.insert(metrics)
