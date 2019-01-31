@@ -50,7 +50,7 @@ class Parser(object):
     SEARCH_RADIUS = 750
 
     GOOGLE_PLACES_URL = 'www.google.com/maps/search/?api=1&query=Google&query_place_id={place_id}'
-    GOOGLE_PLACES_FIELDS = ['name','types', 'place_id', 'distance', 'rating']
+    GOOGLE_PLACES_FIELDS = ['name','types', 'url', 'distance', 'rating'] # 'place_id'
 
 
     def __init__(self, config):
@@ -147,6 +147,11 @@ class Parser(object):
     def coordinate_distance(A, B):
         r_earth = 6371000
         deg = lambda rad: math.pi*rad/180
+
+        if type(A) == tuple:
+            A = {name:A[i] for i, name in enumerate(['lat', 'lng'])}
+        if type(B) == tuple:
+            B = {name:B[i] for i, name in enumerate(['lat', 'lng'])}
 
         delta = {}
         for dim in ['lat', 'lng']:
