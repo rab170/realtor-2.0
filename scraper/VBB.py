@@ -31,7 +31,7 @@ class VBB:
                 stop['distance'] = stop.pop('dist')
                 stop['lng'] = stop.pop('lon')
                 stops.append(stop)
-            return stops
+            return sorted(stops, key=lambda stop: stop['distance'])
         return []
 
     def trip(self, origin, destination, **params):
