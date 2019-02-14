@@ -21,6 +21,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from abc import ABCMeta, abstractmethod
 
+from .VBB import VBB
 
 def metric(f):
     def g(self, soup):
@@ -55,9 +56,11 @@ class Parser(object):
 
     def __init__(self, config):
 
-
         methods = inspect.getmembers(self, predicate=inspect.ismethod)
         self.metric_methods = [method for (name, method) in methods if 'is_metric' in dir(method)]
+
+        if 'bundesland' in config:
+            self.bundesland = config['bundesland']
 
         if 'proxies' in config:
             proxies = config['proxies']
@@ -75,6 +78,9 @@ class Parser(object):
 
         if 'google_api_key' in config:
             self.gmaps = googlemaps.Client(key=config['google_api_key'])
+
+        if 'VBB' in config:
+            self.vbb = VBB(**config['VBB'])
 
         if 'webdriver_path' in config:
             options = webdriver.ChromeOptions()
@@ -142,6 +148,12 @@ class Parser(object):
             places[name] = sorted(places[name].values(), key=lambda place: place['distance'])
 
         return places
+
+    def vbb_stations(self, apartment_coordinates):
+        if self.bundesland == 'BE' and hasattr(self, 'vbb'):
+            stations = self.vbb.nearby_stops(apartment_coordinates)
+            return {'trains': stations}
+        return {}
 
     @staticmethod
     def coordinate_distance(A, B):
@@ -298,8 +310,8 @@ class Gesucht(Parser):
         geocode_result = self.gmaps.geocode(address)
         geo = geocode_result[0]['geometry']['location']
         places = self.google_places(geo)
-
-        return {'address': address, **geo, **places}
+        vbb_stations = self.vbb_stations(geo)
+        return {'address': address, **geo, **places, **vbb_stations}
 
     @metric
     def get_title(self, soup):
