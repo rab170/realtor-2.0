@@ -16,7 +16,6 @@ class VBB:
         return '{base_uri}/{service}?accessId={accessId}&format={format}'.format(**params)
 
     def nearby_stops(self, origin, **params):
-        origin['long'] = origin.pop('lng')
 
         params = {**params, **self.location(origin)}
         param_str = '&'.join('{k}={v}'.format(k=k, v=v) for k, v in params.items())
@@ -50,8 +49,11 @@ class VBB:
 
     @staticmethod
     def location(coord, location_type='origin'):
+
         location = {}
         s = '{location_type}Coord{coord_type}'
+
+        coord = {'lat': coord['lat'], 'long': coord['lng']}
 
         for coord_type, coordinate in coord.items():
             key = s.format(location_type=location_type, coord_type=coord_type.capitalize())
