@@ -16,6 +16,8 @@ class VBB:
         return '{base_uri}/{service}?accessId={accessId}&format={format}'.format(**params)
 
     def nearby_stops(self, origin, **params):
+        origin['long'] = origin.pop('lng')
+
         params = {**params, **self.location(origin)}
         param_str = '&'.join('{k}={v}'.format(k=k, v=v) for k, v in params.items())
 
@@ -35,6 +37,7 @@ class VBB:
         return []
 
     def trip(self, origin, destination, **params):
+
         params = {**params, **self.location(origin),
                   **self.location(destination, location_type='dest')}
 
