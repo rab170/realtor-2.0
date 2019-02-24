@@ -21,6 +21,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from abc import ABCMeta, abstractmethod
 
+from .utilities import coordinate_distance
 from .VBB import VBB
 
 def metric(f):
@@ -138,7 +139,7 @@ class Parser(object):
 
                     place_id = place['place_id']
                     location = place['geometry']['location']
-                    place['distance'] = self.coordinate_distance(location, apartment_coordinates)
+                    place['distance'] = coordinate_distance(location, apartment_coordinates)
                     place['url'] = self.GOOGLE_PLACES_URL.format(place_id=place['place_id'])
 
                     if place['distance'] <= self.MAX_DISTANCE:
@@ -154,26 +155,6 @@ class Parser(object):
             stations = self.vbb.nearby_stops(apartment_coordinates)
             return {'trains': stations}
         return {}
-
-    @staticmethod
-    def coordinate_distance(A, B):
-        r_earth = 6371000
-        deg = lambda rad: math.pi*rad/180
-
-        if type(A) == tuple:
-            A = {name:A[i] for i, name in enumerate(['lat', 'lng'])}
-        if type(B) == tuple:
-            B = {name:B[i] for i, name in enumerate(['lat', 'lng'])}
-
-        delta = {}
-        for dim in ['lat', 'lng']:
-            delta[dim] = deg(A[dim] - B[dim])
-
-        a = deg(A['lat'])*deg(B['lat'])
-        b =   math.sin(delta['lat']/2)**2 + \
-            a*math.sin(delta['lng']/2)**2
-        c = 2*math.atan2(b**0.5, (1-b)**0.5)
-        return r_earth*c
 
     @abstractmethod
     def get_listings(self, listing_url):
