@@ -79,8 +79,6 @@ class VBB:
                       'distance': int(dist),
                       'transit_modes': [mode]} for mode, speed in modes.items()]
 
-        route_options += estimates
-
         return route_options + estimates
 
     def trip(self, origin, destination, biking_distance=0, **params):
