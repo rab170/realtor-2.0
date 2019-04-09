@@ -25,9 +25,15 @@ if __name__ == '__main__':
     try:
         with mongo.collection.watch([{'$match': {'operationType': 'insert'}}]) as stream:
             for insertion in stream:
-                listing = insertion['fullDocument']
-                origin = {k: listing[k] for k in ['_id', 'url', 'lat', 'lng']}
 
+                keys = ['_id', 'url', 'lat', 'lng']
+                listing = insertion['fullDocument']
+                
+                try:
+                    origin = {k: listing[k] for k in keys}
+                except KeyError:
+                    continue
+                
                 successes = 0
                 for idx, destination in destinations.iterrows():
                     try:
